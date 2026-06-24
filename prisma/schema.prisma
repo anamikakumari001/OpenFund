@@ -1,0 +1,364 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model User {
+  id                String         @id @default(cuid())
+  name              String?
+  email             String?        @unique
+  emailVerified     DateTime?
+  image             String?
+  githubId          String?        @unique
+  githubUsername    String?        @unique
+  githubAccessToken String?
+  bio               String?
+  website           String?
+  location          String?
+  twitterUsername   String?
+  stellarPublicKey  String?
+  stellarSecretKey  String?
+  role              UserRole       @default(SUPPORTER)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  accounts          Account[]
+  sessions          Session[]
+  projects          Project[]
+  donations         Donation[]
+  notifications     Notification[]
+  badges            UserBadge[]
+  votes             Vote[]
+  watchedProjects   ProjectWatch[]
+
+  comments          Comment[]
+}
+
+enum UserRole {
+  SUPPORTER
+  MAINTAINER
+  ORGANIZATION
+  ADMIN
+}
+
+model Project {
+  id                  String            @id @default(cuid())
+  slug                String            @unique
+  name                String
+  description         String?           @db.Text
+  longDescription     String?           @db.Text
+  logoUrl             String?
+  bannerUrl           String?
+  githubRepoId        String?           @unique
+  githubOwner         String
+  githubRepo          String
+  githubUrl           String
+  stars               Int               @default(0)
+  forks               Int               @default(0)
+  openIssues          Int               @default(0)
+  watchers            Int               @default(0)
+  language            String?
+  languages           Json?
+  license             String?
+  topics              String[]
+  readme              String?           @db.Text
+  website             String?
+  fundingGoal         Decimal?          @db.Decimal(18, 7)
+  fundingGoalCurrency String            @default("USDC")
+  totalRaised         Decimal           @default(0) @db.Decimal(18, 7)
+  monthlyRaised       Decimal           @default(0) @db.Decimal(18, 7)
+  supporterCount      Int               @default(0)
+  healthScore         Int               @default(0)
+  category            ProjectCategory   @default(OTHER)
+  status              ProjectStatus     @default(ACTIVE)
+  stellarWalletId     String?
+  treasuryAddress     String?
+  featured            Boolean           @default(false)
+  verified            Boolean           @default(false)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  lastGithubSync      DateTime?
+  ownerId             String
+  owner               User              @relation(fields: [ownerId], references: [id])
+  donations           Donation[]
+  milestones          Milestone[]
+  issues              FundedIssue[]
+  releases            Release[]
+  contributors        Contributor[]
+  watchedBy           ProjectWatch[]
+  comments            Comment[]
+  votes               Vote[]
+  notifications       Notification[]
+  analytics           ProjectAnalytics?
+}
+
+enum ProjectCategory {
+  DEVELOPER_TOOLS
+  INFRASTRUCTURE
+  LIBRARIES
+  FRAMEWORKS
+  SECURITY
+  DATA
+  ML_AI
+  BLOCKCHAIN
+  MOBILE
+  WEB
+  DESKTOP
+  DEVOPS
+  DOCUMENTATION
+  EDUCATION
+  COMMUNITY
+  OTHER
+}
+
+enum ProjectStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+  FUNDED
+  COMPLETED
+}
+
+model Milestone {
+  id               String          @id @default(cuid())
+  projectId        String
+  githubId         String?
+  title            String
+  description      String?         @db.Text
+  dueDate          DateTime?
+  completedAt      DateTime?
+  status           MilestoneStatus @default(OPEN)
+  fundingGoal      Decimal?        @db.Decimal(18, 7)
+  totalRaised      Decimal         @default(0) @db.Decimal(18, 7)
+  escrowBalance    Decimal         @default(0) @db.Decimal(18, 7)
+  escrowReleased   Boolean         @default(false)
+  escrowCancelled  Boolean         @default(false)
+  progress         Int             @default(0)
+  issueCount       Int             @default(0)
+  closedCount      Int             @default(0)
+  order            Int             @default(0)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  project          Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  donations        Donation[]
+}
+
+enum MilestoneStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model FundedIssue {
+  id          String     @id @default(cuid())
+  projectId   String
+  githubId    String?
+  number      Int
+  title       String
+  description String?    @db.Text
+  url         String
+  labels      String[]
+  state       String     @default("open")
+  fundingGoal Decimal?   @db.Decimal(18, 7)
+  totalRaised Decimal    @default(0) @db.Decimal(18, 7)
+  closedAt    DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  donations   Donation[]
+}
+
+model Donation {
+  id              String         @id @default(cuid())
+  projectId       String
+  userId          String
+  milestoneId     String?
+  issueId         String?
+  amount          Decimal        @db.Decimal(18, 7)
+  currency        String         @default("USDC")
+  amountUsd       Decimal?       @db.Decimal(18, 2)
+  stellarTxHash   String?        @unique
+  stellarTxMemo   String?
+  status          DonationStatus @default(PENDING)
+  escrowMode      Boolean        @default(false)
+  message         String?
+  anonymous       Boolean        @default(false)
+  recurring       Boolean        @default(false)
+  recurringPeriod String?
+  createdAt       DateTime       @default(now())
+  confirmedAt     DateTime?
+  project         Project        @relation(fields: [projectId], references: [id])
+  user            User           @relation(fields: [userId], references: [id])
+  milestone       Milestone?     @relation(fields: [milestoneId], references: [id])
+  issue           FundedIssue?   @relation(fields: [issueId], references: [id])
+}
+
+enum DonationStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+  REFUNDED
+}
+
+model Release {
+  id          String    @id @default(cuid())
+  projectId   String
+  githubId    String?
+  tagName     String
+  name        String?
+  body        String?   @db.Text
+  url         String
+  prerelease  Boolean   @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Contributor {
+  id            String   @id @default(cuid())
+  projectId     String
+  githubLogin   String
+  avatarUrl     String?
+  profileUrl    String?
+  contributions Int      @default(0)
+  role          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, githubLogin])
+}
+
+model ProjectWatch {
+  id        String   @id @default(cuid())
+  userId    String
+  projectId String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId])
+}
+
+model Vote {
+
+  id        String   @id @default(cuid())
+  userId    String
+  projectId String
+  value     Int      @default(1)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  userId    String
+  projectId String
+  body      String   @db.Text
+  parentId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  projectId String?
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+}
+
+enum NotificationType {
+  DONATION_RECEIVED
+  MILESTONE_COMPLETED
+  FUNDING_GOAL_REACHED
+  NEW_RELEASE
+  NEW_ISSUE
+  DONATION_CONFIRMED
+  PROJECT_UPDATE
+  BADGE_EARNED
+  COMMENT_REPLY
+}
+
+model UserBadge {
+  id       String   @id @default(cuid())
+  userId   String
+  badge    Badge
+  earnedAt DateTime @default(now())
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badge])
+}
+
+enum Badge {
+  FIRST_DONATION
+  FUNDED_5_PROJECTS
+  FUNDED_10_PROJECTS
+  FUNDED_MILESTONE
+  FUNDED_10_MILESTONES
+  OPEN_SOURCE_CHAMPION
+  EARLY_ADOPTER
+  TOP_SUPPORTER
+  VERIFIED_MAINTAINER
+  LEGEND
+}
+
+model ProjectAnalytics {
+  id             String   @id @default(cuid())
+  projectId      String   @unique
+  pageViews      Int      @default(0)
+  uniqueVisitors Int      @default(0)
+  donationCount  Int      @default(0)
+  watcherCount   Int      @default(0)
+  shareCount     Int      @default(0)
+  updatedAt      DateTime @updatedAt
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}

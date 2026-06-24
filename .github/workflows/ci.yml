@@ -1,0 +1,307 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "20"
+  RUST_VERSION: "stable"
+
+jobs:
+  # ── Job 1: Lint & Type Check ─────────────────────────────────────────────────
+  lint-and-typecheck:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./openfund
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: openfund/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run TypeScript type check
+        run: npx tsc --noEmit
+
+  # ── Job 2: Frontend Tests ────────────────────────────────────────────────────
+  frontend-tests:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+    defaults:
+      run:
+        working-directory: ./openfund
+
+    env:
+      DATABASE_URL: "postgresql://test:test@localhost:5432/openfund_test"
+      NEXTAUTH_SECRET: "ci-test-secret-not-for-production"
+      NEXTAUTH_URL: "http://localhost:3000"
+      NEXT_PUBLIC_STELLAR_NETWORK: "testnet"
+      NEXT_PUBLIC_ESCROW_CONTRACT_ID: "CCRZRCMEVQUV6WM2IJVWTIDDLHFJAWRVWR4JR3YBWY6JA5E3RREP7QQS"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: openfund/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run frontend tests with coverage
+        run: npm run test:ci
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: openfund/coverage/
+          retention-days: 7
+
+  # ── Job 3: Build ─────────────────────────────────────────────────────────────
+  build:
+    name: Next.js Build
+    runs-on: ubuntu-latest
+    needs: frontend-tests
+    defaults:
+      run:
+        working-directory: ./openfund
+
+    env:
+      DATABASE_URL: "postgresql://test:test@localhost:5432/openfund_test"
+      NEXTAUTH_SECRET: "ci-build-secret"
+      NEXTAUTH_URL: "http://localhost:3000"
+      NEXT_PUBLIC_STELLAR_NETWORK: "testnet"
+      NEXT_PUBLIC_ESCROW_CONTRACT_ID: "CCRZRCMEVQUV6WM2IJVWTIDDLHFJAWRVWR4JR3YBWY6JA5E3RREP7QQS"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+      GITHUB_CLIENT_ID: "placeholder"
+      GITHUB_CLIENT_SECRET: "placeholder"
+      ESCROW_CONTRACT_ID: "CCRZRCMEVQUV6WM2IJVWTIDDLHFJAWRVWR4JR3YBWY6JA5E3RREP7QQS"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: openfund/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Build Next.js application
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextjs-build
+          path: openfund/.next/
+          retention-days: 1
+
+  # ── Job 4: Smart Contract Tests ───────────────────────────────────────────────
+  contract-tests:
+    name: Soroban Contract Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./openfund/contracts/milestone-escrow
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust ${{ env.RUST_VERSION }}
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: wasm32-unknown-unknown
+          components: clippy, rustfmt
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "openfund/contracts/milestone-escrow -> target"
+
+      - name: Check Rust formatting
+        run: cargo fmt --check
+
+      - name: Run Clippy lints
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run contract unit tests
+        run: cargo test 2>&1 | tee /tmp/contract-test-output.txt
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: Build WASM artifact
+        run: cargo build --target wasm32-unknown-unknown --release
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: contract-test-output
+          path: /tmp/contract-test-output.txt
+          retention-days: 7
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: milestone-escrow-wasm
+          path: target/wasm32-unknown-unknown/release/milestone_escrow.wasm
+          retention-days: 14
+
+  # ── Job 5: Deploy to Vercel (main only) ──────────────────────────────────────
+  deploy:
+    name: Deploy to Vercel (Production)
+    runs-on: ubuntu-latest
+    needs: [build, contract-tests]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: ${{ steps.vercel-deploy.outputs.url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: openfund/package-lock.json
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel environment
+        working-directory: ./openfund
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Build for Vercel
+        working-directory: ./openfund
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Deploy to Vercel Production
+        id: vercel-deploy
+        working-directory: ./openfund
+        run: |
+          URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Deployed to: $URL"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Comment deployment URL on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `✅ Deployed to production: ${{ steps.vercel-deploy.outputs.url }}`
+            })
+
+  # ── Job 6: Preview Deploy (PRs only) ─────────────────────────────────────────
+  preview-deploy:
+    name: Vercel Preview Deploy
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.event_name == 'pull_request'
+    environment:
+      name: preview
+      url: ${{ steps.vercel-preview.outputs.url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: openfund/package-lock.json
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel environment
+        working-directory: ./openfund
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Build for Vercel preview
+        working-directory: ./openfund
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Deploy Vercel preview
+        id: vercel-preview
+        working-directory: ./openfund
+        run: |
+          URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Preview URL: $URL"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Comment preview URL on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🔍 Preview deployment: ${{ steps.vercel-preview.outputs.url }}`
+            })
