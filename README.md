@@ -2,7 +2,8 @@
 
 > GitHub-connected crowdfunding on the Stellar blockchain — fund open-source projects with milestone-based escrow
 
-[![CI/CD](https://github.com/your-org/openfund/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/openfund/actions)
+[![Live Demo](https://img.shields.io/badge/Live-openfund--alpha.vercel.app-22c55e?logo=vercel)](https://openfund-alpha.vercel.app)
+[![CI/CD](https://github.com/anamikakumari001/OpenFund/actions/workflows/ci.yml/badge.svg)](https://github.com/anamikakumari001/OpenFund/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Stellar Testnet](https://img.shields.io/badge/Stellar-Testnet-6C3FF4)](https://stellar.expert/explorer/testnet/contract/CCRZRCMEVQUV6WM2IJVWTIDDLHFJAWRVWR4JR3YBWY6JA5E3RREP7QQS)
 
@@ -469,28 +470,53 @@ Push → contract-tests (parallel)
 
 ## Deployment Guide
 
-### Frontend (Vercel — Recommended)
+### Live Deployment
+
+| Resource | URL |
+|----------|-----|
+| **Live App** | https://openfund-alpha.vercel.app |
+| **GitHub Repo** | https://github.com/anamikakumari001/OpenFund |
+| **Escrow Contract** | [`CCRZRCMEVQUV6WM2IJVWTIDDLHFJAWRVWR4JR3YBWY6JA5E3RREP7QQS`](https://stellar.expert/explorer/testnet/contract/CCRZRCMEVQUV6WM2IJVWTIDDLHFJAWRVWR4JR3YBWY6JA5E3RREP7QQS) |
+| **Network** | Stellar Testnet |
+| **USDC SAC** | `CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA` |
+
+### CI/CD Auto-Deploy
+
+Every push to `main` triggers the 6-stage GitHub Actions pipeline:
+1. Lint & TypeScript check
+2. Frontend tests (72 Jest tests)
+3. Next.js production build
+4. Soroban contract tests (10 Rust unit tests)
+5. **Automatic Vercel production deploy** (requires `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` secrets in GitHub)
+6. Preview deploy for PRs with URL comment
+
+### Manual Frontend Deploy (Vercel)
 
 ```bash
 # Install Vercel CLI
 npm i -g vercel
 
-# Deploy from openfund/ directory
+# Link and deploy from openfund/ directory
 cd openfund
-vercel deploy --prod
+vercel link --scope anamika-raj
+vercel deploy --prod --scope anamika-raj
 ```
 
-Set all environment variables from `.env.example` in the Vercel dashboard.
+Set all environment variables from `.env.example` in the Vercel dashboard under **Project Settings → Environment Variables**.
 
-### Frontend (Railway)
+### GitHub Actions Secrets Required
 
-```bash
-railway login
-railway init
-railway up
-```
+Add these to **GitHub → Settings → Secrets and variables → Actions**:
 
-Add environment variables via `railway variables set KEY=VALUE`.
+| Secret | How to get it |
+|--------|---------------|
+| `VERCEL_TOKEN` | Vercel dashboard → Account Settings → Tokens |
+| `VERCEL_ORG_ID` | `.vercel/project.json` → `orgId` after `vercel link` |
+| `VERCEL_PROJECT_ID` | `.vercel/project.json` → `projectId` after `vercel link` |
+| `DATABASE_URL` | Your PostgreSQL connection string |
+| `NEXTAUTH_SECRET` | `openssl rand -base64 32` |
+| `GITHUB_CLIENT_ID` | GitHub OAuth App → Client ID |
+| `GITHUB_CLIENT_SECRET` | GitHub OAuth App → Client Secret |
 
 ### Database
 
@@ -514,9 +540,9 @@ git push origin main
 
 - [ ] `DATABASE_URL` points to production PostgreSQL
 - [ ] `NEXTAUTH_SECRET` is a unique random string (not reused from dev)
-- [ ] `NEXTAUTH_URL` is the production domain
+- [ ] `NEXTAUTH_URL` set to `https://openfund-alpha.vercel.app` (or your domain)
 - [ ] `GITHUB_CLIENT_ID/SECRET` from a production OAuth App with correct callback URL
-- [ ] `ESCROW_CONTRACT_ID` matches deployed contract
+- [ ] `ESCROW_CONTRACT_ID` = `CCRZRCMEVQUV6WM2IJVWTIDDLHFJAWRVWR4JR3YBWY6JA5E3RREP7QQS`
 - [ ] `ESCROW_DEPLOYER_SECRET` is secured (not in logs/CI env output)
 
 ---
