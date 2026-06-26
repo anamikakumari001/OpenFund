@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD Pipeline
 
 on:
   push:
@@ -15,49 +15,36 @@ env:
   RUST_VERSION: "stable"
 
 jobs:
-  # ── Smart contract: test + build WASM ────────────────────────────────────────
-  contracts:
-    name: Smart Contract
+  # ── Job 1: Lint & Type Check ─────────────────────────────────────────────────
+  lint-and-typecheck:
+    name: Lint & Type Check
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./contracts/milestone-escrow
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
         with:
-          toolchain: ${{ env.RUST_VERSION }}
-          targets: wasm32-unknown-unknown
-          components: clippy, rustfmt
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: package-lock.json
 
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: "contracts/milestone-escrow -> target"
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Run contract tests
-        run: cargo test
-        env:
-          RUST_BACKTRACE: 1
+      - name: Run ESLint
+        run: npm run lint
 
-      - name: Build WASM artifact
-        run: cargo build --target wasm32-unknown-unknown --release
+      - name: Run TypeScript type check
+        run: npx tsc --noEmit
 
-      - name: Upload WASM artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: milestone-escrow-wasm
-          path: contracts/milestone-escrow/target/wasm32-unknown-unknown/release/milestone_escrow.wasm
-          retention-days: 14
-
-  # ── Frontend: install → lint → build → test (all four in one job) ────────────
-  frontend:
-    name: Frontend
+  # ── Job 2: Frontend Tests ────────────────────────────────────────────────────
+  frontend-tests:
+    name: Frontend Tests
     runs-on: ubuntu-latest
+    needs: lint-and-typecheck
 
     env:
       DATABASE_URL: "postgresql://test:test@localhost:5432/openfund_test"
@@ -65,7 +52,45 @@ jobs:
       NEXTAUTH_URL: "http://localhost:3000"
       NEXT_PUBLIC_STELLAR_NETWORK: "testnet"
       NEXT_PUBLIC_ESCROW_CONTRACT_ID: "CCRZRCMEVQUV6WM2IJVWTIDDLHFJAWRVWR4JR3YBWY6JA5E3RREP7QQS"
-      NEXT_PUBLIC_CONTRACT_ID: "CCRZRCMEVQUV6WM2IJVWTIDDLHFJAWRVWR4JR3YBWY6JA5E3RREP7QQS"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run frontend tests with coverage
+        run: npm run test:ci
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7
+
+  # ── Job 3: Build ─────────────────────────────────────────────────────────────
+  build:
+    name: Next.js Build
+    runs-on: ubuntu-latest
+    needs: frontend-tests
+
+    env:
+      DATABASE_URL: "postgresql://test:test@localhost:5432/openfund_test"
+      NEXTAUTH_SECRET: "ci-build-secret"
+      NEXTAUTH_URL: "http://localhost:3000"
+      NEXT_PUBLIC_STELLAR_NETWORK: "testnet"
+      NEXT_PUBLIC_ESCROW_CONTRACT_ID: "CCRZRCMEVQUV6WM2IJVWTIDDLHFJAWRVWR4JR3YBWY6JA5E3RREP7QQS"
       NEXT_PUBLIC_APP_URL: "http://localhost:3000"
       GITHUB_CLIENT_ID: "placeholder"
       GITHUB_CLIENT_SECRET: "placeholder"
@@ -85,19 +110,171 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Lint
-        run: npm run lint
+      - name: Generate Prisma client
+        run: npx prisma generate
 
-      - name: Build
+      - name: Build Next.js application
         run: npm run build
 
-      - name: Test
-        run: npm run test:ci
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextjs-build
+          path: .next/
+          retention-days: 1
 
-      - name: Upload coverage report
+  # ── Job 4: Smart Contract Tests ───────────────────────────────────────────────
+  contract-tests:
+    name: Soroban Contract Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./contracts/milestone-escrow
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust ${{ env.RUST_VERSION }}
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: wasm32-unknown-unknown
+          components: clippy, rustfmt
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "contracts/milestone-escrow -> target"
+
+      - name: Check Rust formatting
+        run: cargo fmt --check
+
+      - name: Run Clippy lints
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run contract unit tests
+        run: cargo test 2>&1 | tee /tmp/contract-test-output.txt
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: Build WASM artifact
+        run: cargo build --target wasm32-unknown-unknown --release
+
+      - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: coverage-report
-          path: coverage/
+          name: contract-test-output
+          path: /tmp/contract-test-output.txt
           retention-days: 7
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: milestone-escrow-wasm
+          path: contracts/milestone-escrow/target/wasm32-unknown-unknown/release/milestone_escrow.wasm
+          retention-days: 14
+
+  # ── Job 5: Deploy to Vercel (main only) ──────────────────────────────────────
+  deploy:
+    name: Deploy to Vercel (Production)
+    runs-on: ubuntu-latest
+    needs: [build, contract-tests]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: ${{ steps.vercel-deploy.outputs.url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Build for Vercel
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Deploy to Vercel Production
+        id: vercel-deploy
+        run: |
+          URL=$(vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Deployed to: $URL"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+  # ── Job 6: Preview Deploy (PRs only) ─────────────────────────────────────────
+  preview-deploy:
+    name: Vercel Preview Deploy
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.event_name == 'pull_request'
+    environment:
+      name: preview
+      url: ${{ steps.vercel-preview.outputs.url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: package-lock.json
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Build for Vercel preview
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Deploy Vercel preview
+        id: vercel-preview
+        run: |
+          URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Preview URL: $URL"
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Comment preview URL on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🔍 Preview deployment: ${{ steps.vercel-preview.outputs.url }}`
+            })

@@ -8,27 +8,9 @@
 [![Stellar Testnet](https://img.shields.io/badge/Stellar-Testnet-6C3FF4)](https://stellar.expert/explorer/testnet/contract/CCRZRCMEVQUV6WM2IJVWTIDDLHFJAWRVWR4JR3YBWY6JA5E3RREP7QQS)
 
 ---
-
-## Table of Contents
-
-1. [Overview](#overview)
-2. [Features](#features)
-3. [Architecture](#architecture)
-4. [Technology Stack](#technology-stack)
-5. [Smart Contract](#smart-contract)
-6. [Installation](#installation)
-7. [Environment Variables](#environment-variables)
-8. [Smart Contract Deployment](#smart-contract-deployment)
-9. [Event Streaming Architecture](#event-streaming-architecture)
-10. [Frontend Architecture](#frontend-architecture)
-11. [Testing](#testing)
-12. [CI/CD Pipeline](#cicd-pipeline)
-13. [Deployment Guide](#deployment-guide)
-14. [Troubleshooting](#troubleshooting)
-15. [Demo Walkthrough](#demo-walkthrough)
-16. [Security](#security)
-17. [Contributing](#contributing)
-
+| **🚀 Live Demo** | **🎥 Demo Video** |
+|:----------------:|:-----------------:|
+| [🌐 OpenFund](https://openfund-alpha.vercel.app/) | [▶️ Watch Demo](https://youtu.be/g9u9IFwh07Q) |
 ---
 
 ## Overview
@@ -113,6 +95,30 @@ Owner                      │                   │                     │
   │                       │                   │◄─{txHash}────────────┤
   │◄─Released!────────────┤                   ├─DB: mark released    │
 ```
+
+---
+
+# Screenshots
+
+## 📱 Mobile Responsive
+
+<p align="center">
+  <img
+    src="https://github.com/user-attachments/assets/cf0b7492-a517-4b53-a356-0c117c51d68f"
+    width="300"
+    alt="Mobile Responsive"
+  />
+</p>
+
+## ⚙️ GitHub Actions CI/CD Pipeline
+
+<p align="center">
+  <img
+    src="https://github.com/user-attachments/assets/404cca69-0f5b-4b31-af03-7c83f9005fcf"
+    width="1000"
+    alt="GitHub Actions CI/CD Pipeline"
+  />
+</p>
 
 ---
 
