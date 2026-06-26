@@ -1,11 +1,10 @@
 "use client";
 
-import React, { useRef, useMemo } from "react";
+import React, { useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls, Text, Sphere, Line } from "@react-three/drei";
+import { OrbitControls, Sphere, Line } from "@react-three/drei";
 import * as THREE from "three";
 import { motion } from "framer-motion";
-import dynamic from "next/dynamic";
 
 const NODES = [
   { id: "center", label: "OpenFund", pos: [0, 0, 0] as [number, number, number], color: "#38BDF8", size: 0.4 },

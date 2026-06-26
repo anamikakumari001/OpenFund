@@ -9,7 +9,7 @@ const Card = React.forwardRef<
     glow?: boolean;
     glass?: boolean;
   }
->(({ className, glow, glass, ...props }, ref) => (
+>(({ className, glow: _glow, glass: _glass, ...props }, ref) => (
   <div
     ref={ref}
     className={cn(

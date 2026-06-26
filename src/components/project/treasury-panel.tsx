@@ -24,7 +24,7 @@ interface TreasuryPanelProps {
   projectId: string;
 }
 
-export function TreasuryPanel({ address, projectId }: TreasuryPanelProps) {
+export function TreasuryPanel({ address }: TreasuryPanelProps) {
   const [balance, setBalance] = useState<TreasuryBalance | null>(null);
   const [txs, setTxs] = useState<TreasuryTx[]>([]);
   const [loading, setLoading] = useState(true);
