@@ -1,17 +1,14 @@
 #![no_std]
 
-use soroban_sdk::{
-    contract, contractimpl, contracttype,
-    token, Address, Env, Symbol,
-};
+use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env, Symbol};
 
 // ─── Storage keys ───────────────────────────────────────────────────────────
 
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
-    MilestoneInfo(Symbol),         // -> MilestoneInfo
-    DonorAmount(Symbol, Address),  // -> i128
+    MilestoneInfo(Symbol),        // -> MilestoneInfo
+    DonorAmount(Symbol, Address), // -> i128
 }
 
 // ─── Data structures ─────────────────────────────────────────────────────────
@@ -19,21 +16,21 @@ pub enum DataKey {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MilestoneInfo {
-    pub admin: Address,     // project owner — who can release/cancel
-    pub treasury: Address,  // where funds go on release
-    pub token: Address,     // USDC SAC address
-    pub balance: i128,      // total escrowed
+    pub admin: Address,    // project owner — who can release/cancel
+    pub treasury: Address, // where funds go on release
+    pub token: Address,    // USDC SAC address
+    pub balance: i128,     // total escrowed
     pub released: bool,
     pub cancelled: bool,
 }
 
 // ─── Event topic symbols (compile-time, ≤9 chars each) ───────────────────────
 
-const EVENT_INIT: &str    = "init";
-const EVENT_FUND: &str    = "fund";
+const EVENT_INIT: &str = "init";
+const EVENT_FUND: &str = "fund";
 const EVENT_RELEASE: &str = "release";
-const EVENT_CANCEL: &str  = "cancel";
-const EVENT_REFUND: &str  = "refund";
+const EVENT_CANCEL: &str = "cancel";
+const EVENT_REFUND: &str = "refund";
 
 // ─── Contract ────────────────────────────────────────────────────────────────
 
@@ -99,14 +96,8 @@ impl MilestoneEscrow {
 
         // Track donor's share for refunds
         let donor_key = DataKey::DonorAmount(milestone_id.clone(), donor.clone());
-        let prev: i128 = env
-            .storage()
-            .persistent()
-            .get(&donor_key)
-            .unwrap_or(0);
-        env.storage()
-            .persistent()
-            .set(&donor_key, &(prev + amount));
+        let prev: i128 = env.storage().persistent().get(&donor_key).unwrap_or(0);
+        env.storage().persistent().set(&donor_key, &(prev + amount));
 
         // EVENT: milestone_funded(milestone_id, donor, amount, new_balance)
         env.events().publish(
@@ -187,11 +178,7 @@ impl MilestoneEscrow {
         assert!(!info.released, "already released");
 
         let donor_key = DataKey::DonorAmount(milestone_id.clone(), donor.clone());
-        let amount: i128 = env
-            .storage()
-            .persistent()
-            .get(&donor_key)
-            .unwrap_or(0);
+        let amount: i128 = env.storage().persistent().get(&donor_key).unwrap_or(0);
         assert!(amount > 0, "no funds to refund");
 
         // Zero out donor's balance before transfer (re-entrancy guard)
@@ -236,13 +223,11 @@ impl MilestoneEscrow {
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
-    use soroban_sdk::{
-        testutils::Address as _,
-        Env,
-    };
     use soroban_sdk::token::StellarAssetClient;
+    use soroban_sdk::{testutils::Address as _, Env};
 
     /// Helper: create a minimal test environment with auth mocked.
     fn create_env() -> Env {
@@ -261,7 +246,7 @@ mod tests {
     }
 
     /// Helper: register the escrow contract and return (contract_id, client).
-    fn deploy_escrow(env: &Env) -> (Address, MilestoneEscrowClient) {
+    fn deploy_escrow(env: &Env) -> (Address, MilestoneEscrowClient<'_>) {
         let contract_id = env.register_contract(None, MilestoneEscrow);
         let client = MilestoneEscrowClient::new(env, &contract_id);
         (contract_id, client)

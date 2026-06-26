@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EscrowBadge } from "./escrow-badge";
+import { CONTRACT_ID } from "@/lib/contract";
 import type { Milestone } from "@prisma/client";
 
 interface EscrowState {
@@ -252,7 +253,7 @@ export function MilestoneEscrowPanel({ milestone, onUpdate }: MilestoneEscrowPan
               )}
 
               <a
-                href={`https://stellar.expert/explorer/testnet/contract/${process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ID}`}
+                href={`https://stellar.expert/explorer/testnet/contract/${CONTRACT_ID}`}
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600 transition-colors"

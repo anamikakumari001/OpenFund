@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { Star, GitFork, ArrowRight, Zap } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -33,10 +34,12 @@ function ProjectCard({ project }: ProjectCardProps) {
           <div className="flex items-start justify-between gap-3 mb-3">
             <div className="flex items-center gap-3">
               {project.logoUrl ? (
-                <img
+                <Image
                   src={project.logoUrl}
                   alt={project.name}
-                  className="h-9 w-9 rounded-xl object-cover border border-gray-200"
+                  width={36}
+                  height={36}
+                  className="rounded-xl object-cover border border-gray-200"
                 />
               ) : (
                 <div className="h-9 w-9 rounded-xl bg-gray-100 border border-gray-200 flex items-center justify-center shrink-0">

@@ -1,5 +1,4 @@
 const GITHUB_API = "https://api.github.com";
-const GITHUB_GRAPHQL = "https://api.github.com/graphql";
 
 export interface GithubRepo {
   id: number;

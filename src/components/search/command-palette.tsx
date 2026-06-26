@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Command } from "cmdk";
 import {
@@ -130,7 +131,7 @@ export function CommandPalette() {
                     )}
                   >
                     {result.image ? (
-                      <img src={result.image} alt="" className="h-8 w-8 rounded-lg object-cover border border-gray-200" />
+                      <Image src={result.image} alt="" width={32} height={32} className="rounded-lg object-cover border border-gray-200" />
                     ) : (
                       <div className="h-8 w-8 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
                         <Zap className="h-4 w-4 text-gray-500" />

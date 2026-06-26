@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/purity */
 "use client";
 
-import { useRef, useMemo, useEffect } from "react";
+import { useRef, useMemo } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Points, PointMaterial } from "@react-three/drei";
 import * as THREE from "three";
@@ -10,12 +10,10 @@ function Stars({ count = 3000 }: { count?: number }) {
   const ref = useRef<THREE.Points>(null);
   const { mouse } = useThree();
 
-  // eslint-disable-next-line react-hooks/purity
   const [positions, colors] = useMemo(() => {
     const pos = new Float32Array(count * 3);
     const col = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
-      // eslint-disable-next-line react-hooks/purity
       const r = Math.random() * 8 + 2;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(Math.random() * 2 - 1);
