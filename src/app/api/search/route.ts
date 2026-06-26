@@ -55,36 +55,19 @@ export async function GET(req: NextRequest) {
     }),
   ]);
 
-  const results: SearchResult[] = [
-    ...projects.map((p) => ({
-      id: p.id,
-      type: "project" as const,
-      title: p.name,
-      subtitle: p.description ?? `by ${p.owner.name ?? "unknown"}`,
-      url: `/project/${p.slug}`,
-      image: p.logoUrl,
-    })),
-    ...users.map((u) => ({
-      id: u.id,
-      type: "user" as const,
-      title: u.name ?? u.githubUsername ?? "Unknown User",
-      subtitle: u.githubUsername ? `@${u.githubUsername}` : "",
-      url: `/profile/${u.githubUsername ?? u.id}`,
-      image: u.image,
-    })),
-  ];
+  type ProjectRow = (typeof projects)[number];
+  type UserRow = (typeof users)[number];
 
-  const projectResults = projects.map((p) => ({
+  const projectResults = projects.map((p: ProjectRow) => ({
     id: p.id,
     type: "project" as const,
     title: p.name,
     subtitle: p.description ?? `by ${p.owner.name ?? "unknown"}`,
     url: `/project/${p.slug}`,
     image: p.logoUrl,
-    meta: {},
   }));
 
-  const userResults = users.map((u) => ({
+  const userResults = users.map((u: UserRow) => ({
     id: u.id,
     type: "user" as const,
     title: u.name ?? u.githubUsername ?? "Unknown User",
@@ -92,6 +75,8 @@ export async function GET(req: NextRequest) {
     url: `/profile/${u.githubUsername ?? u.id}`,
     image: u.image,
   }));
+
+  const results: SearchResult[] = [...projectResults, ...userResults];
 
   return NextResponse.json({ results, projects: projectResults, users: userResults });
 }

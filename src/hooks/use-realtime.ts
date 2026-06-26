@@ -76,6 +76,6 @@ export function useRealtimeDonations(projectSlug: string) {
 }
 
 /** Default refetch interval for SSE-fallback polling. */
-export function useProjectData(_slug: string) {
+export function useProjectData(_slug?: string) {
   return { refetchInterval: 30_000 };
 }
