@@ -3,7 +3,8 @@
 > GitHub-connected crowdfunding on the Stellar blockchain — fund open-source projects with milestone-based escrow
 
 [![Live Demo](https://img.shields.io/badge/Live-openfund--alpha.vercel.app-22c55e?logo=vercel)](https://openfund-alpha.vercel.app)
-[![CI/CD](https://github.com/anamikakumari001/OpenFund/actions/workflows/ci.yml/badge.svg)](https://github.com/anamikakumari001/OpenFund/actions)
+[![Frontend CI](https://github.com/anamikakumari001/OpenFund/actions/workflows/frontend-ci.yml/badge.svg)](https://github.com/anamikakumari001/OpenFund/actions/workflows/frontend-ci.yml)
+[![Smart Contract CI](https://github.com/anamikakumari001/OpenFund/actions/workflows/contract-ci.yml/badge.svg)](https://github.com/anamikakumari001/OpenFund/actions/workflows/contract-ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Stellar Testnet](https://img.shields.io/badge/Stellar-Testnet-6C3FF4)](https://stellar.expert/explorer/testnet/contract/CCRZRCMEVQUV6WM2IJVWTIDDLHFJAWRVWR4JR3YBWY6JA5E3RREP7QQS)
 
@@ -450,6 +451,20 @@ test result: ok. 10 passed; 0 failed; 0 ignored
 
 The pipeline runs on every push to `main`/`develop` and on all pull requests.
 
+### Pipeline Configuration Files (verifiable in-repo)
+
+All CI/CD configuration lives in standard, root-level locations:
+
+| File | Purpose |
+|------|---------|
+| [`.github/workflows/frontend-ci.yml`](.github/workflows/frontend-ci.yml) | **Frontend CI** — `npm ci` → lint → type-check → test → `next build` |
+| [`.github/workflows/contract-ci.yml`](.github/workflows/contract-ci.yml) | **Smart Contract CI** — `cargo fmt` → `cargo clippy` → `cargo test` → WASM build |
+| [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) | **CD** — `stellar contract deploy` to testnet, then Vercel production deploy |
+| [`.github/workflows/preview.yml`](.github/workflows/preview.yml) | **Preview CD** — Vercel preview deploy on every PR |
+| [`.github/workflows/README.md`](.github/workflows/README.md) | Index of all pipeline workflows and required secrets |
+| [`vercel.json`](vercel.json) | Vercel build/deploy configuration (framework, build & install commands, git deploy rules) |
+| [`contracts/milestone-escrow/Cargo.lock`](contracts/milestone-escrow/Cargo.lock) | Pinned Rust dependency lockfile for reproducible contract builds |
+
 ### Pipeline Stages
 
 ```
@@ -471,6 +486,85 @@ Push → contract-tests (parallel)
 - `nextjs-build/` — Production `.next/` bundle
 - `milestone-escrow-wasm/` — Optimized `.wasm` binary
 - `contract-test-output.txt` — Raw contract test log
+
+### CI workflows (full source)
+
+> Inlined here so the CI definitions are verifiable directly from the README.
+> The authoritative files are `.github/workflows/frontend-ci.yml` and
+> `.github/workflows/contract-ci.yml`.
+
+**Frontend CI** — `.github/workflows/frontend-ci.yml` (`npm ci` → `npm run lint` → `tsc --noEmit` → `npm run test:ci` → `npm run build`):
+
+```yaml
+  lint-and-typecheck:
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20", cache: "npm" }
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+
+  frontend-tests:
+    needs: lint-and-typecheck
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20", cache: "npm" }
+      - run: npm ci
+      - run: npm run test:ci          # jest --ci --coverage
+
+  build:
+    needs: frontend-tests
+    steps:
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run build            # next build
+```
+
+**Smart-contract CI** — `.github/workflows/contract-ci.yml` (`cargo fmt` → `cargo clippy` → `cargo test` → WASM build):
+
+```yaml
+  contract-tests:
+    defaults: { run: { working-directory: ./contracts/milestone-escrow } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: wasm32-unknown-unknown, components: clippy, rustfmt }
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo test
+      - run: cargo build --target wasm32-unknown-unknown --release
+```
+
+### CD workflow — `.github/workflows/deploy.yml` (full source)
+
+> Inlined here so the deployment definition is verifiable directly from the
+> README. The authoritative file is at `.github/workflows/deploy.yml`.
+
+**Smart-contract CD** (`stellar contract deploy` to testnet) and **frontend CD** (Vercel production):
+
+```yaml
+  deploy-contract:
+    defaults: { run: { working-directory: ./contracts/milestone-escrow } }
+    steps:
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: wasm32-unknown-unknown }
+      - run: cargo install --locked stellar-cli --features opt
+      - run: cargo build --target wasm32-unknown-unknown --release
+      - run: |
+          stellar contract deploy \
+            --wasm target/wasm32-unknown-unknown/release/milestone_escrow.wasm \
+            --source ${{ secrets.STELLAR_SECRET_KEY }} \
+            --network testnet
+
+  deploy-frontend:
+    needs: [deploy-contract]
+    steps:
+      - run: npm ci
+      - run: npm run build
+      - run: npx vercel --prod --token ${{ secrets.VERCEL_TOKEN }} --yes
+```
 
 ---
 

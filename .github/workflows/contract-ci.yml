@@ -1,0 +1,68 @@
+name: Smart Contract CI
+
+# Continuous Integration for the Soroban (Rust) milestone-escrow contract:
+#   cargo fmt  →  cargo clippy  →  cargo test  →  cargo build (wasm)
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: contract-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUST_VERSION: "stable"
+
+jobs:
+  contract-tests:
+    name: Soroban Contract Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./contracts/milestone-escrow
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust ${{ env.RUST_VERSION }}
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: wasm32-unknown-unknown
+          components: clippy, rustfmt
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "contracts/milestone-escrow -> target"
+
+      - name: Check Rust formatting
+        run: cargo fmt --check
+
+      - name: Run Clippy lints
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run contract unit tests
+        run: cargo test 2>&1 | tee /tmp/contract-test-output.txt
+        env:
+          RUST_BACKTRACE: 1
+
+      - name: Build WASM artifact
+        run: cargo build --target wasm32-unknown-unknown --release
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: contract-test-output
+          path: /tmp/contract-test-output.txt
+          retention-days: 7
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: milestone-escrow-wasm
+          path: contracts/milestone-escrow/target/wasm32-unknown-unknown/release/milestone_escrow.wasm
+          retention-days: 14
