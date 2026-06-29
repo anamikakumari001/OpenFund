@@ -25,24 +25,40 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Check deploy credentials
+        id: guard
+        working-directory: .
+        run: |
+          if [ -n "${{ secrets.STELLAR_SECRET_KEY }}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Contract deploy skipped::STELLAR_SECRET_KEY secret is not set; skipping contract deployment."
+          fi
+
       - name: Install Rust toolchain
+        if: steps.guard.outputs.enabled == 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_VERSION }}
           targets: wasm32-unknown-unknown
 
       - name: Cache Rust dependencies
+        if: steps.guard.outputs.enabled == 'true'
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "contracts/milestone-escrow -> target"
 
       - name: Install Stellar CLI
-        run: cargo install --locked stellar-cli --features opt
+        if: steps.guard.outputs.enabled == 'true'
+        run: cargo install --locked stellar-cli
 
       - name: Build WASM
+        if: steps.guard.outputs.enabled == 'true'
         run: cargo build --target wasm32-unknown-unknown --release
 
       - name: Deploy contract to testnet
+        if: steps.guard.outputs.enabled == 'true'
         run: |
           stellar contract deploy \
             --wasm target/wasm32-unknown-unknown/release/milestone_escrow.wasm \
@@ -66,7 +82,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Check deploy credentials
+        id: guard
+        run: |
+          if [ -n "${{ secrets.VERCEL_TOKEN }}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Frontend deploy skipped::VERCEL_TOKEN secret is not set; skipping Vercel deployment."
+          fi
+
       - name: Setup Node.js ${{ env.NODE_VERSION }}
+        if: steps.guard.outputs.enabled == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -74,9 +101,11 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install dependencies
+        if: steps.guard.outputs.enabled == 'true'
         run: npm ci
 
       - name: Build
+        if: steps.guard.outputs.enabled == 'true'
         run: npm run build
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -90,6 +119,7 @@ jobs:
           NEXT_PUBLIC_STELLAR_NETWORK: "testnet"
 
       - name: Deploy to Vercel (production)
+        if: steps.guard.outputs.enabled == 'true'
         run: npx vercel --prod --token ${{ secrets.VERCEL_TOKEN }} --yes
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}

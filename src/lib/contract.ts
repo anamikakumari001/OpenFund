@@ -1,5 +1,6 @@
 import * as StellarSdk from "@stellar/stellar-sdk";
-import { server, networkPassphrase } from "./stellar-sdk";
+import { rpcServer as server } from "./escrow";
+import { NETWORK_PASSPHRASE as networkPassphrase } from "./stellar";
 
 export const CONTRACT_ID: string =
   process.env.NEXT_PUBLIC_CONTRACT_ID ??
